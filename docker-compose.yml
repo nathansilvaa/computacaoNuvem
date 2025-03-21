@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_to_django
+    environment:
+      POSTGRES_DB: meu_db_django
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+    volumes:   
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  redis:
+    image: redis:latest
+    container_name: redis_cache
+    networks:
+      - app_network
+
+  web:
+    build: ./fabio
+    container_name: django_app
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgres://postgres:1234@db:5432/meu_db_django
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./static_volume:/app/static
+      - ./media_volume:/app/media
+    ports:
+      - "8000:8000"
+    networks:
+      - app_network
+    command: gunicorn fabio.wsgi:application --bind 0.0.0.0:8000
+
+  frontend:
+    build: ./frontend
+    container_name: react_app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - web
+    networks:
+      - app_network
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx_server_to_app_django
+    ports:
+      - "80:80"
+    volumes:
+      - ./static_volume:/app/static
+      - ./media_volume:/app/media
+      - ./nginx-config/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - web
+      - frontend
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  db_data:
+  static_volume:
+  media_volume:
